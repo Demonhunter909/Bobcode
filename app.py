@@ -98,23 +98,26 @@ def login():
         if not email or not password:
             flash("Email and password required", "error")
             return redirect("/login")
-        
-        result = supabase.auth.sign_in_with_password({
-            "email": email,
-            "password": password
-        })
 
-        if not result.user:
+        try:
+            result = supabase.auth.sign_in_with_password({
+                "email": email,
+                "password": password
+            })
+        except Exception:
             flash("Invalid email or password", "error")
             return redirect("/login")
-        
+
         session["user"] = {
             "id": result.user.id,
             "email": result.user.email
         }
-        flash(f"Welcome back, {email}!", "success")
+
         return redirect("/")
-    return render_template("login.html", username=session.get("user", {}).get("email"))
+
+    return render_template("login.html")
+
+
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
