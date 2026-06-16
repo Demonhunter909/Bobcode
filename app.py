@@ -54,14 +54,12 @@ def get_paginated_category(category, page, per_page=16):
         .eq("category", category)
         .order("created_at", desc=True)
         .range(start, start + per_page)
-        .execute()
     )
 
     count_response = (
         supabase.table("uploads")
         .select("id", count="exact")
         .eq("category", category)
-        .execute()
     )
 
     total_items = count_response.count
@@ -76,13 +74,11 @@ def get_paginated_all(page, per_page=16):
         .select("*")
         .order("created_at", desc=True)
         .range(start, start + per_page)
-        .execute()
     )
 
     count_response = (
         supabase.table("uploads")
         .select("id", count="exact")
-        .execute()
     )
 
     total_items = count_response.count
@@ -145,7 +141,7 @@ def register():
             "id": result.user.id,
             "username": username,
             "parent_id": session.get("user", {}).get("id")
-        }).execute()
+        })
 
         session["user"] = {
             "id": result.user.id,
@@ -240,7 +236,7 @@ def upload():
             "title": title,
             "description": description,
             "cover_image": public_url
-        }).execute()
+        })
 
         flash("URL uploaded successfully!", "success")
         if category == "home":
@@ -253,7 +249,6 @@ def upload():
         supabase.table("uploads")
         .select("*")
         .order("created_at", desc=True)
-        .execute()
     ).data
 
     return render_template("adminpanel.html", username=session.get("user"), uploads=uploads)
@@ -265,7 +260,6 @@ def delete_url(url_id):
         supabase.table("uploads")
         .select("category")
         .eq("id", url_id)
-        .execute()
     ).data
 
     if not row:
@@ -274,7 +268,7 @@ def delete_url(url_id):
 
     category = row["category"]
 
-    supabase.table("uploads").delete().eq("id", url_id).execute()
+    supabase.table("uploads").delete().eq("id", url_id)
 
     flash("URL deleted", "success")
     if category == "home":
@@ -295,7 +289,6 @@ def edit_url(url_id):
             supabase.table("uploads")
             .select("category")
             .eq("id", url_id)
-            .execute()
         ).data
 
         category = row["category"]
@@ -304,7 +297,7 @@ def edit_url(url_id):
             "title": title,
             "description": description,
             "url": url
-        }).eq("id", url_id).execute()
+        }).eq("id", url_id)
 
         flash("URL updated!", "success")
         if category == "home":
@@ -316,7 +309,6 @@ def edit_url(url_id):
         supabase.table("uploads")
         .select("*")
         .eq("id", url_id)
-        .execute()
     ).data
 
     if not item:
