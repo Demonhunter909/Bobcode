@@ -146,7 +146,6 @@ def register():
             .insert({
                 "id": result.user.id,
                 "username": username,
-                "parent_id": session.get("user", {}).get("id")
             })
             .execute()
         )
