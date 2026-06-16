@@ -39,7 +39,7 @@ def make_session_permanent():
 def login_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        if session.get("user_id") is None:
+        if "user" not in session:
             flash("You must be logged in", "error")
             return redirect("/login")
         return f(*args, **kwargs)
@@ -147,7 +147,6 @@ def register():
             "username": username,
             "parent_id": session.get("user", {}).get("id")
         })
-        .execute()
         )
 
         if profile_insert.error:
