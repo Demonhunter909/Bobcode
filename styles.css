@@ -22,3 +22,26 @@ img {
   margin-right: auto;
   width: 50%;
 }
+
+.flash {
+    background-color: #ffb6c1;
+    color: #fff;
+    padding: 10px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+    text-align: center;
+    animation: fadeInOut 3s ease-in-out;
+}
+
+p {
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+}
+
+h1, h4 {
+    font-family:Cambria, Cochin, Georgia, Times, 'Times New Roman', serif;
+}
+
+accountdropdown {
+    position: relative;
+    display: inline-block;
+}
