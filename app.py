@@ -60,6 +60,7 @@ def get_paginated_category(category, page, per_page=16):
         supabase.table("uploads")
         .select("id", count="exact")
         .eq("category", category)
+        .execute()
     )
 
     total_items = count_response.count
@@ -79,6 +80,7 @@ def get_paginated_all(page, per_page=16):
     count_response = (
         supabase.table("uploads")
         .select("id", count="exact")
+        .execute()
     )
 
     total_items = count_response.count
