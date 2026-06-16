@@ -186,11 +186,10 @@ def login():
 def register():
     if request.method == "POST":
         username = request.form.get("username")
-        email = request.form.get("email")
         password = request.form.get("password")
         confirm = request.form.get("confirm_password")
 
-        if not username or not email or not password or not confirm:
+        if not username or not password or not confirm:
             flash("All fields required", "error")
             return redirect("/register")
 
@@ -206,16 +205,23 @@ def register():
 
         try:
             cursor.execute("""
-                INSERT INTO users (username, email, password, parent_id)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO users (username, password, parent_id)
+                VALUES (%s, %s, %s)
                 RETURNING id
-            """, (username, email, hashed, parent_id))
+            """, (username, hashed, parent_id))
             user_id = cursor.fetchone()[0]
+            conn.commit()
+            conn.close()
+            
+            session["user_id"] = user_id
+            session["username"] = username
+            flash(f"Account created successfully! Welcome, {username}!", "success")
+            return redirect("/")
         except psycopg2.Error:
-            flash("Username or email already exists", "error")
+            flash("Username already exists", "error")
             conn.close()
             return redirect("/register")
-
+    
     return render_template("register.html", username=session.get("username"))
 
 @app.route("/logout")
