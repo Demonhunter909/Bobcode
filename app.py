@@ -132,28 +132,27 @@ def register():
             flash("Passwords do not match", "error")
             return redirect("/register")
 
-        result = supabase.auth.sign_up({
-            "email": email,
-            "password": password
-        })
+        try:
+            result = supabase.auth.sign_up({
+                "email": email,
+                "password": password
+            })
+        except Exception as e:
+            flash("Registration failed: " + str(e), "error")
+            return redirect("/register")
 
         if result.user is None:
             flash("Email already exists", "error")
             return redirect("/register")
 
-        profile_insert = (
-            supabase.table("profiles")
-            .insert({
+        try:
+            supabase.table("profiles").insert({
                 "id": result.user.id,
-                "username": username,
-            })
-            .execute()
-        )
-
-        if profile_insert.error:
-            flash("Profile creation failed: " + profile_insert.error.message, "error")
+                "username": username
+            }).execute()
+        except Exception as e:
+            flash("Profile creation failed: " + str(e), "error")
             return redirect("/register")
-
 
         session["user"] = {
             "id": result.user.id,
