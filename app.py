@@ -141,11 +141,14 @@ def register():
             flash("Email already exists", "error")
             return redirect("/register")
 
-        profile_insert = supabase.table("profiles").insert({
+        profile_insert = (
+            supabase.table("profiles").insert({
             "id": result.user.id,
             "username": username,
             "parent_id": session.get("user", {}).get("id")
         })
+        .execute()
+        )
 
         if profile_insert.error:
             flash("Profile creation failed: " + profile_insert.error.message, "error")
@@ -258,6 +261,7 @@ def upload():
         supabase.table("uploads")
         .select("*")
         .order("created_at", desc=True)
+        .execute()
     ).data
 
     return render_template("adminpanel.html", username=session.get("user"), uploads=uploads)
@@ -269,6 +273,7 @@ def delete_url(url_id):
         supabase.table("uploads")
         .select("category")
         .eq("id", url_id)
+        .execute()
     ).data
 
     if not row:
@@ -277,7 +282,7 @@ def delete_url(url_id):
 
     category = row["category"]
 
-    supabase.table("uploads").delete().eq("id", url_id)
+    supabase.table("uploads").delete().eq("id", url_id).execute()
 
     flash("URL deleted", "success")
     if category == "home":
@@ -298,6 +303,7 @@ def edit_url(url_id):
             supabase.table("uploads")
             .select("category")
             .eq("id", url_id)
+            .execute()
         ).data
 
         category = row["category"]
@@ -306,7 +312,7 @@ def edit_url(url_id):
             "title": title,
             "description": description,
             "url": url
-        }).eq("id", url_id)
+        }).eq("id", url_id).execute()
 
         flash("URL updated!", "success")
         if category == "home":
@@ -318,6 +324,7 @@ def edit_url(url_id):
         supabase.table("uploads")
         .select("*")
         .eq("id", url_id)
+        .execute()
     ).data
 
     if not item:
