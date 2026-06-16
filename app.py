@@ -1,5 +1,4 @@
 import os
-import psycopg2
 import datetime
 import time
 import math
@@ -32,83 +31,11 @@ UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-SLIDES_DIR = os.path.join(app.config["UPLOAD_FOLDER"], "slideshow")
-os.makedirs(SLIDES_DIR, exist_ok=True)
 
 @app.before_request
 def make_session_permanent():
-    """Make session permanent on every request"""
     session.permanent = True
-    app.logger.debug(f"Session data: {dict(session)}")
 
-def get_db():
-    return psycopg2.connect(
-        host=os.getenv("DB_HOST"),
-        port=os.getenv("DB_PORT", "5432"),
-        database=os.getenv("DB_NAME"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-        sslmode="require"
-    )
-
-def init_db():
-    conn = get_db()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username TEXT UNIQUE NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            parent_id INTEGER,
-            max_children INTEGER DEFAULT 0,
-        );
-    """)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS site_settings (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        );
-    """)
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS uploads (
-        id SERIAL PRIMARY KEY,
-        url TEXT NOT NULL,
-        category TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        user_id INTEGER REFERENCES users(id),
-        title TEXT,
-        description TEXT,
-        cover_image TEXT
-    );
-""")
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS sessions (
-            id SERIAL PRIMARY KEY,
-            session_id VARCHAR(255) UNIQUE NOT NULL,
-            data BYTEA NOT NULL,
-            expiry TIMESTAMP NOT NULL
-        );
-    """)
-
-    cursor.execute("SELECT value FROM site_settings WHERE key = 'max_users'")
-    if cursor.fetchone() is None:
-        cursor.execute("INSERT INTO site_settings (key, value) VALUES ('max_users', '0')")
-
-    conn.commit()
-    conn.close()
-
-@app.route("/init")
-def init_route():
-    try:
-        init_db()
-        return "Database initialized successfully!"
-    except Exception as e:
-        return f"Error: {e}", 500
 def login_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -119,77 +46,85 @@ def login_required(f):
     return wrapper
 
 def get_paginated_category(category, page, per_page=16):
-    conn = get_db()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT id, url, title, description, category, cover_image
-        FROM uploads
-        WHERE category = %s
-        ORDER BY created_at DESC
-    """, (category,))
-    items = cursor.fetchall()
-    conn.close()
-
-    total_pages = math.ceil(len(items) / per_page)
     start = (page - 1) * per_page
-    end = start + per_page
 
-    return items[start:end], total_pages
+    response = (
+        supabase.table("uploads")
+        .select("*")
+        .eq("category", category)
+        .order("created_at", desc=True)
+        .range(start, start + per_page)
+        .execute()
+    )
+
+    count_response = (
+        supabase.table("uploads")
+        .select("id", count="exact")
+        .eq("category", category)
+        .execute()
+    )
+
+    total_items = count_response.count
+    total_pages = math.ceil(total_items / per_page)
+    return response.data, total_pages
 
 def get_paginated_all(page, per_page=16):
-    conn = get_db()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT id, url, title, description, category, cover_image
-        FROM uploads
-        ORDER BY created_at DESC
-    """)
-    items = cursor.fetchall()
-    conn.close()
-
-    total_pages = math.ceil(len(items) / per_page)
     start = (page - 1) * per_page
-    end = start + per_page
 
-    return items[start:end], total_pages
+    response = (
+        supabase.table("uploads")
+        .select("*")
+        .order("created_at", desc=True)
+        .range(start, start + per_page)
+        .execute()
+    )
+
+    count_response = (
+        supabase.table("uploads")
+        .select("id", count="exact")
+        .execute()
+    )
+
+    total_items = count_response.count
+    total_pages = math.ceil(total_items / per_page)
+    return response.data, total_pages
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form.get("username")
+        email = request.form.get("email")
         password = request.form.get("password")
 
-        if not username or not password:
-            flash("Username and password required", "error")
+        if not email or not password:
+            flash("Email and password required", "error")
             return redirect("/login")
+        
+        result = supabase.auth.sign_in_with_password({
+            "email": email,
+            "password": password
+        })
 
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, username, password FROM users WHERE username = %s", (username,))
-        row = cursor.fetchone()
-        conn.close()
-
-        if row is None or not check_password_hash(row[2], password):
-            flash("Invalid username or password", "error")
+        if not result.user:
+            flash("Invalid email or password", "error")
             return redirect("/login")
-
-        session["user_id"] = row[0]
-        session["username"] = row[1]
-        flash(f"Welcome, {username}!", "success")
+        
+        session["user"] = {
+            "id": result.user.id,
+            "email": result.user.email
+        }
+        flash(f"Welcome back, {email}!", "success")
         return redirect("/")
-
     return render_template("login.html", username=session.get("username"))
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
+        email = request.form.get("email")
         username = request.form.get("username")
         password = request.form.get("password")
         confirm = request.form.get("confirm_password")
 
-        if not username or not password or not confirm:
+        if not email or not username or not password or not confirm:
             flash("All fields required", "error")
             return redirect("/register")
 
@@ -197,35 +132,34 @@ def register():
             flash("Passwords do not match", "error")
             return redirect("/register")
 
-        hashed = generate_password_hash(password)
-        parent_id = session.get("user_id")
+        result = supabase.auth.sign_up({
+            "email": email,
+            "password": password
+        })
 
-        conn = get_db()
-        cursor = conn.cursor()
-
-        try:
-            cursor.execute("""
-                INSERT INTO users (username, password, parent_id)
-                VALUES (%s, %s, %s)
-                RETURNING id
-            """, (username, hashed, parent_id))
-            user_id = cursor.fetchone()[0]
-            conn.commit()
-            conn.close()
-            
-            session["user_id"] = user_id
-            session["username"] = username
-            flash(f"Account created successfully! Welcome, {username}!", "success")
-            return redirect("/")
-        except psycopg2.Error:
-            flash("Username already exists", "error")
-            conn.close()
+        if result.user is None:
+            flash("Email already exists", "error")
             return redirect("/register")
+
+        supabase.table("profiles").insert({
+            "id": result.user.id,
+            "username": username,
+            "parent_id": session.get("user", {}).get("id")
+        }).execute()
+
+        session["user"] = {
+            "id": result.user.id,
+            "email": email
+        }
+
+        flash(f"Account created successfully! Welcome, {username}!", "success")
+        return redirect("/")
     
-    return render_template("register.html", username=session.get("username"))
+    return render_template("register.html", username=session.get("user", {}).get("email"))
 
 @app.route("/logout")
 def logout():
+    supabase.auth.sign_out()
     session.clear()
     flash("You have been logged out", "success")
     return redirect("/")
@@ -235,7 +169,7 @@ def index():
     page = int(request.args.get("page", 1))
     uploads, total_pages = get_paginated_category("home", page)
 
-    return render_template("index.html", uploads=uploads, page=page, total_pages=total_pages, username=session.get("username"))
+    return render_template("index.html", uploads=uploads, page=page, total_pages=total_pages, username=session.get("user"))
 
 
 @app.route("/pricing")
@@ -243,7 +177,7 @@ def pricing():
     page = int(request.args.get("page", 1))
     uploads, total_pages = get_paginated_category("pricing", page)
 
-    return render_template("pricing.html", uploads=uploads, page=page, total_pages=total_pages, username=session.get("username"))
+    return render_template("pricing.html", uploads=uploads, page=page, total_pages=total_pages, username=session.get("user"))
 
 
 @app.route("/library")
@@ -251,26 +185,21 @@ def library():
     page = int(request.args.get("page", 1))
     uploads, total_pages = get_paginated_category("library", page)
 
-    return render_template("library.html", uploads=uploads, page=page, total_pages=total_pages, username=session.get("username"))
+    return render_template("library.html", uploads=uploads, page=page, total_pages=total_pages, username=session.get("user"))
 
 @app.route("/about")
 def about():
     page = int(request.args.get("page", 1))
     uploads, total_pages = get_paginated_category("about", page)
     
-    return render_template("about.html", uploads=uploads, page=page, total_pages=total_pages, username=session.get("username"))
+    return render_template("about.html", uploads=uploads, page=page, total_pages=total_pages, username=session.get("user"))
 
 @app.route("/adminpanel")
 @login_required
 def adminpanel():
     page = int(request.args.get("page", 1))
     uploads, total_pages = get_paginated_all(page)
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, filename FROM slideshow")
-    slides = cursor.fetchall()
-    conn.close()
-    return render_template("adminpanel.html", username=session.get("username"), uploads=uploads, page=page, total_pages=total_pages, slides=slides)
+    return render_template("adminpanel.html", username=session.get("user"), uploads=uploads, page=page, total_pages=total_pages)
 
 
 @app.route("/upload", methods=["GET", "POST"])
@@ -293,15 +222,10 @@ def upload():
 
         # Read file bytes
         file_bytes = image.read()
-
-        # Upload to Supabase Storage bucket named "uploads"
-        result = supabase.storage.from_("uploads").upload(
-            unique_name,
-            file_bytes
-        )
+        upload_result = supabase.storage.from_("uploads").upload(unique_name, file_bytes)
 
         # Handle upload error
-        if isinstance(result, dict) and "error" in result:
+        if isinstance(upload_result, dict) and "error" in upload_result:
             flash("Failed to upload image to storage", "error")
             return redirect("/upload")
 
@@ -309,14 +233,14 @@ def upload():
         public_url = supabase.storage.from_("uploads").get_public_url(unique_name)
 
         # Save metadata + public image URL in Neon DB
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO uploads (url, category, user_id, title, description, cover_image)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (url, category, session["user_id"], title, description, public_url))
-        conn.commit()
-        conn.close()
+        supabase.table("uploads").insert({
+            "url": url,
+            "category": category,
+            "user_id": session["user"]["id"],
+            "title": title,
+            "description": description,
+            "cover_image": public_url
+        }).execute()
 
         flash("URL uploaded successfully!", "success")
         if category == "home":
@@ -325,40 +249,32 @@ def upload():
             return redirect(f"/{category}")
 
     # GET request: load existing uploads + slideshow
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, url, title, description, category, cover_image
-        FROM uploads
-        ORDER BY created_at DESC
-    """)
-    uploads = cursor.fetchall()
+    uploads = (
+        supabase.table("uploads")
+        .select("*")
+        .order("created_at", desc=True)
+        .execute()
+    ).data
 
-    cursor.execute("SELECT id, filename FROM slideshow")
-    slides = cursor.fetchall()
-    conn.close()
-
-    return render_template("adminpanel.html", username=session.get("username"), uploads=uploads, slides=slides)
+    return render_template("adminpanel.html", username=session.get("user"), uploads=uploads)
   
 @app.route("/delete-url/<int:url_id>")
 @login_required
 def delete_url(url_id):
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # Get category so we can redirect back to the correct page
-    cursor.execute("SELECT category FROM uploads WHERE id = %s", (url_id,))
-    row = cursor.fetchone()
+    row = (
+        supabase.table("uploads")
+        .select("category")
+        .eq("id", url_id)
+        .execute()
+    ).data
 
     if not row:
         flash("URL not found", "error")
         return redirect("/")
 
-    category = row[0]
+    category = row["category"]
 
-    cursor.execute("DELETE FROM uploads WHERE id = %s", (url_id,))
-    conn.commit()
-    conn.close()
+    supabase.table("uploads").delete().eq("id", url_id).execute()
 
     flash("URL deleted", "success")
     if category == "home":
@@ -369,28 +285,26 @@ def delete_url(url_id):
 @app.route("/edit-url/<int:url_id>", methods=["GET", "POST"])
 @login_required
 def edit_url(url_id):
-    conn = get_db()
-    cursor = conn.cursor()
 
     if request.method == "POST":
         title = request.form.get("title")
         description = request.form.get("description")
         url = request.form.get("url")
 
-        # Get category BEFORE updating
-        cursor.execute("SELECT category FROM uploads WHERE id = %s", (url_id,))
-        row = cursor.fetchone()
-        category = row[0]
+        row = (
+            supabase.table("uploads")
+            .select("category")
+            .eq("id", url_id)
+            .execute()
+        ).data
 
-        # Update the record
-        cursor.execute("""
-            UPDATE uploads
-            SET title = %s, description = %s, url = %s
-            WHERE id = %s
-        """, (title, description, url, url_id))
+        category = row["category"]
 
-        conn.commit()
-        conn.close()
+        supabase.table("uploads").update({
+            "title": title,
+            "description": description,
+            "url": url
+        }).eq("id", url_id).execute()
 
         flash("URL updated!", "success")
         if category == "home":
@@ -398,16 +312,18 @@ def edit_url(url_id):
         else:
             return redirect(f"/{category}")
 
-    cursor.execute("SELECT title, description, url FROM uploads WHERE id = %s", (url_id,))
-    item = cursor.fetchone()
-    conn.close()
+    item = (
+        supabase.table("uploads")
+        .select("*")
+        .eq("id", url_id)
+        .execute()
+    ).data
 
-    return render_template("edit_url.html", item=item, url_id=url_id, username=session.get("username"))
+    if not item:
+        flash("URL not found", "error")
+        return redirect("/")
 
-@app.route("/uploads/<path:filename>")
-def uploaded_file(filename):
-    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+    return render_template("edit_url.html", item=item, url_id=url_id, username=session.get("user"))
 
 if __name__ == "__main__":
-    init_db()
     app.run(debug=False, host="0.0.0.0", port=5000)
