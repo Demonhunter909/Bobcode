@@ -113,8 +113,8 @@ def login():
             "email": result.user.email
         }
 
+        flash("Logged in successfully!", "success")
         return redirect("/")
-    flash("Welcome back!", "success")
 
     return render_template("login.html")
 
