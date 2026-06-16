@@ -54,6 +54,7 @@ def get_paginated_category(category, page, per_page=16):
         .eq("category", category)
         .order("created_at", desc=True)
         .range(start, start + per_page)
+        .execute()
     )
 
     count_response = (
@@ -75,6 +76,7 @@ def get_paginated_all(page, per_page=16):
         .select("*")
         .order("created_at", desc=True)
         .range(start, start + per_page)
+        .execute()
     )
 
     count_response = (
