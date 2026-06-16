@@ -1,0 +1,37 @@
+body {
+    background-color: #f8034d;
+    color: #ffa1e3;
+}
+
+.navbar {
+    background-color: #ffa1e3;
+    padding: 20px;
+    text-align: center;
+}
+
+.navbar a {
+    color: #ffd8f9;
+    text-decoration: none;
+    font-size: 18px;
+    margin: 0 15px;
+}
+
+/* Navbar toggler (hamburger menu) button styling */
+.navbar-toggler {
+    border-color: #ffd8f9;
+}
+
+.navbar-toggler-icon {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='%23848688' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
+h1, h2, h3, h4, h6, p {
+    font-family: Cambria, Cochin, Georgia, Times, 'Times New Roman', serif;
+    color: #ffa1e3;
+}
+
+.indent, p, h1, h4 {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
