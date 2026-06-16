@@ -114,6 +114,7 @@ def login():
         }
 
         return redirect("/")
+    flash("Welcome back!", "success")
 
     return render_template("login.html")
 
